@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # Banking API Server (from parent directory)
+  banking-api:
+    image: singhacksbjb/sidequest-server:latest
+    container_name: banking-api-server
+    ports:
+      - "8123:8123"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/accounts/validate/ACC1000"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - banking-network
+
+  # Banking Client
+  banking-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: banking-client
+    depends_on:
+      banking-api:
+        condition: service_healthy
+    environment:
+      - BANKING_API_URL=http://banking-api:8123
+      - BANKING_USERNAME=alice
+      - BANKING_PASSWORD=secret
+      - LOG_LEVEL=INFO
+    networks:
+      - banking-network
+    # Override command to run examples
+    command: python banking_client.py
+
+  # Optional: Run CLI interactively
+  banking-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: banking-cli
+    depends_on:
+      banking-api:
+        condition: service_healthy
+    environment:
+      - BANKING_API_URL=http://banking-api:8123
+    networks:
+      - banking-network
+    stdin_open: true
+    tty: true
+    profiles:
+      - cli
+    # Run CLI help by default
+    command: python cli.py --help
+
+networks:
+  banking-network:
+    driver: bridge
+
+# Usage:
+# Start server and run client examples:
+#   docker-compose up
+#
+# Run CLI interactively:
+#   docker-compose --profile cli run --rm banking-cli python cli.py transfer --from ACC1000 --to ACC1001 --amount 100
+#
+# Run specific transfer:
+#   docker-compose run --rm banking-client python cli.py transfer --from ACC1000 --to ACC1001 --amount 50 --auth
+#
+# Stop all services:
+#   docker-compose down
